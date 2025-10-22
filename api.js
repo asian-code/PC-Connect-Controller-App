@@ -1,13 +1,17 @@
 /**
- * PC Connect API Service
+ * Proxmox VM Controller API Service
  * 
- * This module handles all API communications with the PC Connect service.
- * Enhanced with modern error handling, retry logic, and timeout support.
+ * This module handles all API communications with the backend service.
+ * Includes authentication, VM management, and error handling.
  */
 
-const API_URL = 'https://api.eric-n.com/pc-connect/';
+const API_URL = 'http://localhost:8000';  // Update with your Cloudflare tunnel URL
 const DEFAULT_TIMEOUT = 10000; // 10 seconds
 const MAX_RETRIES = 3;
+
+// Store access token in memory
+let accessToken = null;
+let currentUser = null;
 
 /**
  * Creates a fetch request with timeout support
@@ -70,131 +74,178 @@ const withRetry = async (apiCall, maxRetries = MAX_RETRIES) => {
 };
 
 /**
- * Fetches the current PC status from the API
- * @returns {Promise<boolean>} True if PC is on, false if off
- * @throws {Error} If the API request fails
+ * Set the access token for authenticated requests
  */
-export const fetchPCStatus = async () => {
+export const setAccessToken = (token) => {
+  accessToken = token;
+};
+
+/**
+ * Set the current user
+ */
+export const setCurrentUser = (user) => {
+  currentUser = user;
+};
+
+/**
+ * Get the current user
+ */
+export const getCurrentUser = () => {
+  return currentUser;
+};
+
+/**
+ * Clear authentication data
+ */
+export const clearAuth = () => {
+  accessToken = null;
+  currentUser = null;
+};
+
+/**
+ * Login user
+ * @param {string} email - User email
+ * @param {string} password - User password
+ * @returns {Promise<object>} Token and user data
+ */
+export const login = async (email, password) => {
+  try {
+    const response = await fetchWithTimeout(`${API_URL}/auth/login`, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        'Accept': 'application/json',
+      },
+      body: JSON.stringify({ email, password }),
+    });
+
+    if (!response.ok) {
+      const error = await response.json();
+      throw new Error(error.detail || 'Login failed');
+    }
+
+    const data = await response.json();
+    setAccessToken(data.access_token);
+    setCurrentUser(data.user);
+    
+    return data;
+  } catch (error) {
+    console.error('Login error:', error);
+    throw new Error(error.message || 'Failed to login');
+  }
+};
+
+/**
+ * Request password reset
+ * @param {string} email - User email
+ */
+export const requestPasswordReset = async (email) => {
+  try {
+    const response = await fetchWithTimeout(`${API_URL}/auth/request-password-reset?email=${encodeURIComponent(email)}`, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+      },
+    });
+
+    if (!response.ok) {
+      throw new Error('Failed to request password reset');
+    }
+
+    return await response.json();
+  } catch (error) {
+    console.error('Password reset error:', error);
+    throw error;
+  }
+};
+
+/**
+ * Fetch all accessible VMs
+ * @returns {Promise<Array>} List of VMs
+ */
+export const fetchVMs = async () => {
   return withRetry(async () => {
     try {
-      const response = await fetchWithTimeout(API_URL, {
+      const response = await fetchWithTimeout(`${API_URL}/vms/`, {
         method: 'GET',
         headers: {
           'Content-Type': 'application/json',
           'Accept': 'application/json',
-          'User-Agent': 'PC-Connect-App/1.0',
+          'Authorization': `Bearer ${accessToken}`,
         },
       });
 
       if (!response.ok) {
-        throw new Error(`HTTP error! status: ${response.status} - ${response.statusText}`);
-      }
-
-      const contentType = response.headers.get('content-type');
-      if (!contentType || !contentType.includes('application/json')) {
-        throw new Error('Invalid response format - expected JSON');
+        if (response.status === 401) {
+          throw new Error('Unauthorized - please login again');
+        }
+        throw new Error(`HTTP error! status: ${response.status}`);
       }
 
       const data = await response.json();
-      
-      // Handle different possible response formats with better validation
-      if (typeof data === 'object' && data !== null) {
-        // Check for explicit status fields
-        if (data.hasOwnProperty('status')) {
-          if (typeof data.status === 'string') {
-            return data.status.toLowerCase() === 'on' || data.status.toLowerCase() === 'online';
-          }
-          return Boolean(data.status);
-        }
-        
-        if (data.hasOwnProperty('isOn')) {
-          return Boolean(data.isOn);
-        }
-        
-        if (data.hasOwnProperty('online')) {
-          return Boolean(data.online);
-        }
-        
-        if (data.hasOwnProperty('powered')) {
-          return Boolean(data.powered);
-        }
-      }
-      
-      // Default fallback - assume any truthy response means PC is on
-      return Boolean(data);
+      return data.vms || [];
       
     } catch (error) {
-      console.error('Error fetching PC status:', error);
-      
-      // Provide more specific error messages
-      if (error.message.includes('timeout')) {
-        throw new Error('Connection timeout - please check your internet connection');
-      }
-      if (error.message.includes('Failed to fetch')) {
-        throw new Error('Network error - please check your internet connection');
-      }
-      if (error.message.includes('HTTP error')) {
-        throw new Error(`Server error: ${error.message}`);
-      }
-      
-      throw new Error('Failed to fetch PC status');
+      console.error('Error fetching VMs:', error);
+      throw new Error(error.message || 'Failed to fetch VMs');
     }
   });
 };
 
 /**
- * Sends a command to turn on the PC
- * @returns {Promise<object>} API response data
- * @throws {Error} If the API request fails
+ * Get VM status
+ * @param {number} vmId - VM ID
+ * @returns {Promise<object>} VM status
  */
-export const turnOnPC = async () => {
+export const getVMStatus = async (vmId) => {
+  try {
+    const response = await fetchWithTimeout(`${API_URL}/vms/${vmId}/status`, {
+      method: 'GET',
+      headers: {
+        'Content-Type': 'application/json',
+        'Accept': 'application/json',
+        'Authorization': `Bearer ${accessToken}`,
+      },
+    });
+
+    if (!response.ok) {
+      throw new Error(`HTTP error! status: ${response.status}`);
+    }
+
+    return await response.json();
+  } catch (error) {
+    console.error(`Error getting VM ${vmId} status:`, error);
+    throw error;
+  }
+};
+
+/**
+ * Start a VM
+ * @param {number} vmId - VM ID
+ * @returns {Promise<object>} Operation result
+ */
+export const startVM = async (vmId) => {
   return withRetry(async () => {
     try {
-      const response = await fetchWithTimeout(API_URL, {
+      const response = await fetchWithTimeout(`${API_URL}/vms/${vmId}/start`, {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
           'Accept': 'application/json',
-          'User-Agent': 'PC-Connect-App/1.0',
+          'Authorization': `Bearer ${accessToken}`,
         },
-        body: JSON.stringify({
-          action: 'turn_on',
-          timestamp: new Date().toISOString(),
-          source: 'mobile_app',
-        }),
       });
 
       if (!response.ok) {
-        throw new Error(`HTTP error! status: ${response.status} - ${response.statusText}`);
+        const error = await response.json();
+        throw new Error(error.detail || 'Failed to start VM');
       }
 
-      const contentType = response.headers.get('content-type');
-      if (contentType && contentType.includes('application/json')) {
-        return await response.json();
-      }
-      
-      // Some APIs might return plain text success message
-      const textResponse = await response.text();
-      return { success: true, message: textResponse };
+      return await response.json();
       
     } catch (error) {
-      console.error('Error turning on PC:', error);
-      
-      // Provide more specific error messages
-      if (error.message.includes('timeout')) {
-        throw new Error('Request timeout - the PC might be starting up');
-      }
-      if (error.message.includes('Failed to fetch')) {
-        throw new Error('Network error - please check your connection');
-      }
-      if (error.message.includes('HTTP error')) {
-        if (error.message.includes('503') || error.message.includes('502')) {
-          throw new Error('PC service temporarily unavailable');
-        }
-        throw new Error(`Server error: ${error.message}`);
-      }
-      
-      throw new Error('Failed to turn on PC');
+      console.error(`Error starting VM ${vmId}:`, error);
+      throw new Error(error.message || 'Failed to start VM');
     }
   });
 };
@@ -205,11 +256,8 @@ export const turnOnPC = async () => {
  */
 export const checkAPIHealth = async () => {
   try {
-    const response = await fetchWithTimeout(API_URL, {
-      method: 'HEAD',
-      headers: {
-        'User-Agent': 'PC-Connect-App/1.0',
-      },
+    const response = await fetchWithTimeout(`${API_URL}/health`, {
+      method: 'GET',
     }, 5000); // Shorter timeout for health check
     
     return response.ok;

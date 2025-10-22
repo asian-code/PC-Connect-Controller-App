@@ -1,19 +1,17 @@
-# 🚀 PC Connect - Glassmorphic React Native App
+# Proxmox VM Controller - Mobile App
 
-A stunning React Native application with glassmorphic design that allows you to remotely turn on your PC through the PC Connect API. Features modern blue and purple gradients, smooth animations, and haptic feedback.
+React Native mobile application for managing Proxmox VMs with authentication and role-based access control.
 
-## ✨ Features
+## 🎯 Features
 
-- **🎨 Glassmorphic UI** - Modern glass-like interface with blur effects
-- **🌈 Blue/Purple Gradients** - Beautiful gradient themes throughout the app
-- **⚡ One-Touch Power Control** - Large power button and toggle switch
-- **📱 Haptic Feedback** - Tactile feedback on interactions
-- **🔄 Smart Animations** - Smooth transitions and pulse effects
-- **🛡️ One-Way Control** - Can only turn PC ON for security
-- **📊 Real-time Status** - Live PC status with visual indicators
-- **🔄 Auto-refresh** - Status updates after successful operations
-- **🌐 Robust API** - Enhanced error handling with retry logic
-- **📱 Cross-platform** - Works on both iOS and Android
+- ✅ **User Authentication** - GoTrue-based login with email verification
+- ✅ **VM Management** - View and control assigned workstation VMs
+- ✅ **Real-time Status** - Live VM status updates
+- ✅ **Role-Based Access** - Admin can see all VMs, users see only their assigned VM
+- ✅ **Clean Minimal UI** - Modern card-based interface
+- ✅ **Auto-refresh** - VM status updates every 30 seconds
+- ✅ **Pull to Refresh** - Manual refresh capability
+- ✅ **Cross-platform** - Works on both iOS and Android
 
 ## 🎯 API Integration
 

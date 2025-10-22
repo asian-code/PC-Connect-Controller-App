@@ -1,0 +1,137 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: gotrue
+  namespace: proxmox-controller
+  labels:
+    app: gotrue
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: gotrue
+  template:
+    metadata:
+      labels:
+        app: gotrue
+    spec:
+      containers:
+      - name: gotrue
+        image: supabase/gotrue:v2.99.0
+        ports:
+        - containerPort: 9999
+          name: http
+        env:
+        - name: GOTRUE_API_HOST
+          valueFrom:
+            configMapKeyRef:
+              name: proxmox-config
+              key: GOTRUE_API_HOST
+        - name: GOTRUE_API_PORT
+          valueFrom:
+            configMapKeyRef:
+              name: proxmox-config
+              key: GOTRUE_API_PORT
+        - name: API_EXTERNAL_URL
+          valueFrom:
+            configMapKeyRef:
+              name: proxmox-config
+              key: API_EXTERNAL_URL
+        - name: GOTRUE_DB_DRIVER
+          value: "postgres"
+        - name: GOTRUE_DB_DATABASE_URL
+          value: "postgres://proxmox_user:$(POSTGRES_PASSWORD)@postgres-service:5432/proxmox_controller?search_path=auth"
+        - name: POSTGRES_PASSWORD
+          valueFrom:
+            secretKeyRef:
+              name: proxmox-secrets
+              key: postgres-password
+        - name: GOTRUE_SITE_URL
+          valueFrom:
+            configMapKeyRef:
+              name: proxmox-config
+              key: GOTRUE_SITE_URL
+        - name: GOTRUE_URI_ALLOW_LIST
+          valueFrom:
+            configMapKeyRef:
+              name: proxmox-config
+              key: GOTRUE_URI_ALLOW_LIST
+        - name: GOTRUE_JWT_SECRET
+          valueFrom:
+            secretKeyRef:
+              name: proxmox-secrets
+              key: gotrue-jwt-secret
+        - name: GOTRUE_JWT_EXP
+          valueFrom:
+            configMapKeyRef:
+              name: proxmox-config
+              key: GOTRUE_JWT_EXP
+        - name: GOTRUE_JWT_DEFAULT_GROUP_NAME
+          valueFrom:
+            configMapKeyRef:
+              name: proxmox-config
+              key: GOTRUE_JWT_DEFAULT_GROUP_NAME
+        - name: GOTRUE_DISABLE_SIGNUP
+          valueFrom:
+            configMapKeyRef:
+              name: proxmox-config
+              key: GOTRUE_DISABLE_SIGNUP
+        - name: GOTRUE_EXTERNAL_EMAIL_ENABLED
+          valueFrom:
+            configMapKeyRef:
+              name: proxmox-config
+              key: GOTRUE_EXTERNAL_EMAIL_ENABLED
+        - name: GOTRUE_MAILER_AUTOCONFIRM
+          valueFrom:
+            configMapKeyRef:
+              name: proxmox-config
+              key: GOTRUE_MAILER_AUTOCONFIRM
+        - name: GOTRUE_SMTP_HOST
+          valueFrom:
+            configMapKeyRef:
+              name: proxmox-config
+              key: GOTRUE_SMTP_HOST
+        - name: GOTRUE_SMTP_PORT
+          valueFrom:
+            configMapKeyRef:
+              name: proxmox-config
+              key: GOTRUE_SMTP_PORT
+        - name: GOTRUE_SMTP_USER
+          valueFrom:
+            secretKeyRef:
+              name: proxmox-secrets
+              key: smtp-user
+        - name: GOTRUE_SMTP_PASS
+          valueFrom:
+            secretKeyRef:
+              name: proxmox-secrets
+              key: smtp-password
+        - name: GOTRUE_SMTP_ADMIN_EMAIL
+          valueFrom:
+            configMapKeyRef:
+              name: proxmox-config
+              key: GOTRUE_SMTP_ADMIN_EMAIL
+        - name: GOTRUE_PASSWORD_MIN_LENGTH
+          valueFrom:
+            configMapKeyRef:
+              name: proxmox-config
+              key: GOTRUE_PASSWORD_MIN_LENGTH
+        livenessProbe:
+          httpGet:
+            path: /health
+            port: 9999
+          initialDelaySeconds: 30
+          periodSeconds: 10
+        readinessProbe:
+          httpGet:
+            path: /health
+            port: 9999
+          initialDelaySeconds: 5
+          periodSeconds: 5
+        resources:
+          requests:
+            memory: "128Mi"
+            cpu: "100m"
+          limits:
+            memory: "256Mi"
+            cpu: "200m"

@@ -1,0 +1,150 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: proxmox-api
+  namespace: proxmox-controller
+  labels:
+    app: proxmox-api
+spec:
+  replicas: 2
+  selector:
+    matchLabels:
+      app: proxmox-api
+  template:
+    metadata:
+      labels:
+        app: proxmox-api
+    spec:
+      containers:
+      - name: api
+        image: your-registry/proxmox-api:latest  # Update with your image
+        imagePullPolicy: Always
+        ports:
+        - containerPort: 8000
+          name: http
+        env:
+        # Database
+        - name: DATABASE_URL
+          valueFrom:
+            secretKeyRef:
+              name: proxmox-secrets
+              key: database-url
+        - name: DATABASE_URL_SYNC
+          valueFrom:
+            secretKeyRef:
+              name: proxmox-secrets
+              key: database-url-sync
+        
+        # Proxmox
+        - name: PROXMOX_HOST
+          valueFrom:
+            configMapKeyRef:
+              name: proxmox-config
+              key: PROXMOX_HOST
+        - name: PROXMOX_PORT
+          valueFrom:
+            configMapKeyRef:
+              name: proxmox-config
+              key: PROXMOX_PORT
+        - name: PROXMOX_USER
+          valueFrom:
+            configMapKeyRef:
+              name: proxmox-config
+              key: PROXMOX_USER
+        - name: PROXMOX_TOKEN_NAME
+          valueFrom:
+            configMapKeyRef:
+              name: proxmox-config
+              key: PROXMOX_TOKEN_NAME
+        - name: PROXMOX_TOKEN_VALUE
+          valueFrom:
+            secretKeyRef:
+              name: proxmox-secrets
+              key: proxmox-token-value
+        - name: PROXMOX_VERIFY_SSL
+          valueFrom:
+            configMapKeyRef:
+              name: proxmox-config
+              key: PROXMOX_VERIFY_SSL
+        - name: PROXMOX_NODE
+          valueFrom:
+            configMapKeyRef:
+              name: proxmox-config
+              key: PROXMOX_NODE
+        
+        # GoTrue
+        - name: GOTRUE_URL
+          value: "http://gotrue-service:9999"
+        - name: GOTRUE_JWT_SECRET
+          valueFrom:
+            secretKeyRef:
+              name: proxmox-secrets
+              key: gotrue-jwt-secret
+        
+        # API
+        - name: API_HOST
+          valueFrom:
+            configMapKeyRef:
+              name: proxmox-config
+              key: API_HOST
+        - name: API_PORT
+          valueFrom:
+            configMapKeyRef:
+              name: proxmox-config
+              key: API_PORT
+        - name: API_RELOAD
+          valueFrom:
+            configMapKeyRef:
+              name: proxmox-config
+              key: API_RELOAD
+        - name: CORS_ORIGINS
+          valueFrom:
+            configMapKeyRef:
+              name: proxmox-config
+              key: CORS_ORIGINS
+        
+        # Security
+        - name: SECRET_KEY
+          valueFrom:
+            secretKeyRef:
+              name: proxmox-secrets
+              key: api-secret-key
+        - name: ALGORITHM
+          valueFrom:
+            configMapKeyRef:
+              name: proxmox-config
+              key: ALGORITHM
+        - name: ACCESS_TOKEN_EXPIRE_MINUTES
+          valueFrom:
+            configMapKeyRef:
+              name: proxmox-config
+              key: ACCESS_TOKEN_EXPIRE_MINUTES
+        
+        # Environment
+        - name: ENVIRONMENT
+          valueFrom:
+            configMapKeyRef:
+              name: proxmox-config
+              key: ENVIRONMENT
+        
+        livenessProbe:
+          httpGet:
+            path: /health
+            port: 8000
+          initialDelaySeconds: 30
+          periodSeconds: 10
+          timeoutSeconds: 5
+        readinessProbe:
+          httpGet:
+            path: /health
+            port: 8000
+          initialDelaySeconds: 10
+          periodSeconds: 5
+          timeoutSeconds: 3
+        resources:
+          requests:
+            memory: "256Mi"
+            cpu: "200m"
+          limits:
+            memory: "512Mi"
+            cpu: "500m"

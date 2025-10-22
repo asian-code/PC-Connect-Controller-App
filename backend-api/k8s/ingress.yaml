@@ -1,0 +1,34 @@
+apiVersion: networking.k8s.io/v1
+kind: Ingress
+metadata:
+  name: proxmox-api-ingress
+  namespace: proxmox-controller
+  annotations:
+    # Cloudflare Tunnel annotations (if using Cloudflare Tunnel Ingress Controller)
+    # Or use standard ingress annotations for your setup
+    nginx.ingress.kubernetes.io/rewrite-target: /
+    nginx.ingress.kubernetes.io/ssl-redirect: "true"
+    nginx.ingress.kubernetes.io/force-ssl-redirect: "true"
+    # Add CORS headers
+    nginx.ingress.kubernetes.io/enable-cors: "true"
+    nginx.ingress.kubernetes.io/cors-allow-methods: "GET, POST, PUT, DELETE, OPTIONS"
+    nginx.ingress.kubernetes.io/cors-allow-headers: "DNT,X-CustomHeader,Keep-Alive,User-Agent,X-Requested-With,If-Modified-Since,Cache-Control,Content-Type,Authorization"
+spec:
+  ingressClassName: nginx  # Change based on your ingress controller
+  rules:
+  - host: your-api-domain.com  # Update with your Cloudflare tunnel domain
+    http:
+      paths:
+      - path: /
+        pathType: Prefix
+        backend:
+          service:
+            name: proxmox-api-service
+            port:
+              number: 8000
+  # TLS is handled by Cloudflare Tunnel
+  # If not using Cloudflare, uncomment and configure:
+  # tls:
+  # - hosts:
+  #   - your-api-domain.com
+  #   secretName: tls-secret

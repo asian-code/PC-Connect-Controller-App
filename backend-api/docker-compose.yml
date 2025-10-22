@@ -1,0 +1,136 @@
+version: '3.8'
+
+services:
+  # PostgreSQL Database
+  postgres:
+    image: postgres:15-alpine
+    container_name: proxmox-postgres
+    restart: unless-stopped
+    environment:
+      POSTGRES_DB: proxmox_controller
+      POSTGRES_USER: proxmox_user
+      POSTGRES_PASSWORD: proxmox_password
+    ports:
+      - "5432:5432"
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U proxmox_user -d proxmox_controller"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+    networks:
+      - proxmox-network
+
+  # GoTrue Authentication Service
+  gotrue:
+    image: supabase/gotrue:v2.99.0
+    container_name: proxmox-gotrue
+    restart: unless-stopped
+    depends_on:
+      postgres:
+        condition: service_healthy
+    environment:
+      GOTRUE_API_HOST: 0.0.0.0
+      GOTRUE_API_PORT: 9999
+      API_EXTERNAL_URL: http://localhost:9999
+      
+      GOTRUE_DB_DRIVER: postgres
+      GOTRUE_DB_DATABASE_URL: postgres://proxmox_user:proxmox_password@postgres:5432/proxmox_controller?search_path=auth
+      
+      GOTRUE_SITE_URL: http://localhost:19006
+      GOTRUE_URI_ALLOW_LIST: "*"
+      
+      GOTRUE_JWT_SECRET: your-super-secret-jwt-key-change-this-in-production
+      GOTRUE_JWT_EXP: 3600
+      GOTRUE_JWT_DEFAULT_GROUP_NAME: authenticated
+      
+      GOTRUE_DISABLE_SIGNUP: "true"  # Admin-only user creation
+      GOTRUE_EXTERNAL_EMAIL_ENABLED: "true"
+      GOTRUE_MAILER_AUTOCONFIRM: "false"  # Require email verification
+      
+      # SMTP Configuration (update with your SMTP settings)
+      GOTRUE_SMTP_HOST: smtp.gmail.com
+      GOTRUE_SMTP_PORT: 587
+      GOTRUE_SMTP_USER: your-email@gmail.com
+      GOTRUE_SMTP_PASS: your-app-password
+      GOTRUE_SMTP_ADMIN_EMAIL: admin@example.com
+      GOTRUE_MAILER_SUBJECTS_CONFIRMATION: "Confirm Your Email"
+      GOTRUE_MAILER_SUBJECTS_RECOVERY: "Reset Your Password"
+      
+      # Security
+      GOTRUE_PASSWORD_MIN_LENGTH: 8
+      GOTRUE_EXTERNAL_ANONYMOUS_USERS_ENABLED: "false"
+      
+    ports:
+      - "9999:9999"
+    healthcheck:
+      test: ["CMD", "wget", "--no-verbose", "--tries=1", "--spider", "http://localhost:9999/health"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+    networks:
+      - proxmox-network
+
+  # FastAPI Backend
+  api:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: proxmox-api
+    restart: unless-stopped
+    depends_on:
+      postgres:
+        condition: service_healthy
+      gotrue:
+        condition: service_healthy
+    environment:
+      # Database
+      DATABASE_URL: postgresql+asyncpg://proxmox_user:proxmox_password@postgres:5432/proxmox_controller
+      DATABASE_URL_SYNC: postgresql://proxmox_user:proxmox_password@postgres:5432/proxmox_controller
+      
+      # Proxmox
+      PROXMOX_HOST: 11.11.11.11
+      PROXMOX_PORT: 8006
+      PROXMOX_USER: cc@pam
+      PROXMOX_TOKEN_NAME: cc
+      PROXMOX_TOKEN_VALUE: df52c07c-34b9-4b84-a695-02e64a49d97d
+      PROXMOX_VERIFY_SSL: "false"
+      PROXMOX_NODE: pve
+      
+      # GoTrue
+      GOTRUE_URL: http://gotrue:9999
+      GOTRUE_JWT_SECRET: your-super-secret-jwt-key-change-this-in-production
+      
+      # API
+      API_HOST: 0.0.0.0
+      API_PORT: 8000
+      API_RELOAD: "false"
+      CORS_ORIGINS: '["http://localhost:19006","http://localhost:8081","exp://192.168.1.100:19000"]'
+      
+      # Security
+      SECRET_KEY: your-super-secret-key-change-this-in-production
+      ALGORITHM: HS256
+      ACCESS_TOKEN_EXPIRE_MINUTES: 30
+      
+      # Environment
+      ENVIRONMENT: development
+    ports:
+      - "8000:8000"
+    volumes:
+      - ./app:/app/app:ro  # Mount for development hot-reload
+    healthcheck:
+      test: ["CMD", "python", "-c", "import requests; requests.get('http://localhost:8000/health')"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+    networks:
+      - proxmox-network
+
+networks:
+  proxmox-network:
+    driver: bridge
+
+volumes:
+  postgres_data:
+    driver: local

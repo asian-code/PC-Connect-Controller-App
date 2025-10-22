@@ -1,0 +1,52 @@
+apiVersion: v1
+kind: Service
+metadata:
+  name: postgres-service
+  namespace: proxmox-controller
+  labels:
+    app: postgres
+spec:
+  type: ClusterIP
+  ports:
+  - port: 5432
+    targetPort: 5432
+    protocol: TCP
+    name: postgres
+  selector:
+    app: postgres
+
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: gotrue-service
+  namespace: proxmox-controller
+  labels:
+    app: gotrue
+spec:
+  type: ClusterIP
+  ports:
+  - port: 9999
+    targetPort: 9999
+    protocol: TCP
+    name: http
+  selector:
+    app: gotrue
+
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: proxmox-api-service
+  namespace: proxmox-controller
+  labels:
+    app: proxmox-api
+spec:
+  type: ClusterIP
+  ports:
+  - port: 8000
+    targetPort: 8000
+    protocol: TCP
+    name: http
+  selector:
+    app: proxmox-api
